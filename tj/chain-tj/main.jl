@@ -23,27 +23,41 @@ function chain_pbc(N)
     @show b 
 end
 #
+#
 function tune_dopping(N, dop_level)
-    
-    if dop_level  == 0
-        state = [isodd(n) ? "Up" : "Dn" for n = 1:N] # 半满的状态， 一个格点上一个spin
-        return state
-    elseif N % dop_level > 0
-        println("N / dop_level must be an integer")
+    L_cell = 2 * dop_level[2]
+    L_emp = 2 * dop_level[1]
+    N_cell = div(N, L_cell)
+    @show N_cell
+    if N % L_cell > 0
+        println("N / L_cell must be an integer")
         sqrt(-1)
     else
         state = fill("a", N)
-        for j = 1:N
-            if j % dop_level == 1
-                state[j] = "Up"
-            elseif j % dop_level == 2
-                state[j] = "Dn"
-            else
-                state[j] = "Emp"
+        L_spin = L_cell - L_emp
+        @show L_spin
+        if L_spin % 2 > 0
+            print("L_spin must be an even to keep total Sz=0")
+            sqrt(-1)
+        else
+            for it = 1:N_cell 
+                for j = 1:L_spin
+                    if j % 2 ==1
+                        state[(it-1) * L_cell + j] = "Up"
+                        #@show (it-1) * L_cell + j
+                    else
+                        state[(it-1) * L_cell + j] = "Dn"
+                        #@show (it-1) * L_cell + j
+                    end
+                end
+                for jj = L_spin+1 : L_cell
+                    state[(it-1) * L_cell + jj] = "Emp"
+                    #@show (it-1) * L_cell + jj
+                end
             end
         end
         return state
-    end    
+    end
 end
 #
 function rundmrg()
@@ -51,7 +65,7 @@ function rundmrg()
     t = 1 
     J = 1
     N = 100
-    dop_level = 2
+    dop_level = (1,5)
     sites = siteinds("tJ",N; conserve_qns = true) # 加上 conserve_qns 条件
     #    
     if bc == "obc"
