@@ -38,27 +38,6 @@ function tune_dopping(N, dop_level)
     end
 end
 #
-function add_NNN_ladder(Ly, Lx)  # add NNN bonds
-    #
-    bonds1 = fill(0, ((Ly-1) * (Lx-1), 2))
-    bonds2 = fill(0, ((Ly-1) * (Lx-1), 2))
-    for i = 1 : (Lx-1)
-        s0 = (i - 1) * Ly + 1
-        for j = 1:(Ly-1)
-            bonds1[(i-1) * (Ly-1) + j, 1] = s0 + j - 1
-            bonds1[(i-1) * (Ly-1) + j, 2] = s0 + j - 1 + (Ly + 1)
-
-            bonds2[(i-1) * (Ly-1) + j, 1] = s0 + j 
-            bonds2[(i-1) * (Ly-1) + j, 2] = s0 + j + (Ly-1)
-        end
-    end
-    @show bonds1
-    @show bonds2
-
-    b12 = cat(bonds1,bonds2,dims=1)
-    return b12
-end
-#
 function build_sites(N,Is_conserve_qns)   
     if Is_conserve_qns == true
         sites = siteinds("tJ",N; conserve_qns = true, conserve_nf=true, conserve_sz=true, conserve_nfparity=true) # 加上 conserve_qns 条件
@@ -108,44 +87,42 @@ function get_psi0(N, dop_level, sites, Is_conserve_qns,way_of_psi0,loadfile)
     end
 end
 #
+#
 function rundmrg()
-    #---------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
     # control parameter
     bc = ""
     Ly = 2
-    Lx = 16
+    Lx = 20
     N = Lx * Ly
     t = 1.0
-    J = 1.0 / 3 * t
-    t_nnn = 1.0 * t
-    J_nnn = (t_nnn / t) *  (t_nnn / t) * J
-    dop_level = (0, 8)
+    J = 1.0 
+    dop_level = (0, 4) # half filling
     #
     Is_conserve_qns = true
     way_of_psi0 = "readfile" # {readfile or default}
     #
-    nsweeps_list = [5]
+    nsweeps_list = [5,5]
     maxdim_preset = [[100, 200, 400],[400,500,500]] # pre setting cutoff dimemsion
     write_disk_dim = 500
     cutoff = [1E-4]
-    noise = [1E-6, 1E-7, 1E-8, 0.0]
+    noise = [1E-6, 1E-7, 1E-8, 1E-9, 1E-10, 1E-11, 0.0]
     #
-    workpath = "./tj/Ladder-t-t-J-J/output/psi/"
+    workpath = "./tj/Ladder-tj/output/psi/"
     dim_lable = 500
-    filename_psi_1 = "Ly$(Ly)_Lx$(Lx)_N$(N)_S$(0.5)_t$(t)_t$(t_nnn)_J$(round(J;digits=4))_J$(round(J_nnn;digits=4))_dimlabel$(dim_lable)_dop$(dop_level)_"
+    #
+    filename_psi_1 = "Ly$(Ly)_Lx$(Lx)_N$(N)_S$(0.5)_t$(t)_J$(round(J;digits=4))_dimlabel$(dim_lable)_dop$(dop_level)_"
     filename_psi_2 = bc
     filename_psi_3 = "_psi.h5"
     filename_psi = join([workpath, filename_psi_1, filename_psi_2, filename_psi_3])
-    #------------------------------------------------------------------------------
-    # get lattice bonds, 2D sqaure wrapped on a cylinder
-    lattice = square_lattice(Lx,Ly, yperiodic = true)
+    #--------------------------------------------------------------------------------
+    # get lattice bonds
+    lattice = square_lattice(Lx,Ly, yperiodic = false)
     @show lattice
-    NNN_bonds = add_NNN_ladder(Ly, Lx)
-    NNN_bonds = sortslices(NNN_bonds, dims=1)
-    @show NNN_bonds
-    #
+    # get the operator sum
     os = OpSum()
     for b in lattice
+        #@show (b.s1, b.s2)
         os .+= -t, "Cdagup", b.s1, "Cup", b.s2
         os .+= -t, "Cdagup", b.s2, "Cup", b.s1
         os .+= -t, "Cdagdn", b.s1, "Cdn", b.s2
@@ -155,36 +132,27 @@ function rundmrg()
         os .+= 0.5 * J, "S-", b.s1, "S+", b.s2 
         os .+= -0.25 * J, "Ntot", b.s1, "Ntot", b.s2  
     end
-    for j = 1:size(NNN_bonds)[1]
-        os .+= -t_nnn, "Cdagup", NNN_bonds[j,1], "Cup", NNN_bonds[j,2]
-        os .+= -t_nnn, "Cdagup", NNN_bonds[j,2], "Cup", NNN_bonds[j,1]
-        
-        os .+= -t_nnn, "Cdagdn", NNN_bonds[j,1], "Cdn", NNN_bonds[j,2]
-        os .+= -t_nnn, "Cdagdn", NNN_bonds[j,2], "Cdn", NNN_bonds[j,1]
-
-        os .+= J_nnn, "Sz", NNN_bonds[j,1], "Sz", NNN_bonds[j,2]
-        os .+= 0.5 * J_nnn, "S+", NNN_bonds[j,1], "S-", NNN_bonds[j,2]
-        os .+= 0.5 * J_nnn, "S-", NNN_bonds[j,1], "S+", NNN_bonds[j,2] 
-        os .+= -0.25 * J_nnn, "Ntot", NNN_bonds[j,1], "Ntot", NNN_bonds[j,2]
-    end  
     # get the hamiltonian MPO
     sites = build_sites(N, Is_conserve_qns)
     psi0 = get_psi0(N, dop_level,sites,Is_conserve_qns,way_of_psi0,filename_psi) # 
-    sites = siteinds(psi0)      
+    sites = siteinds(psi0)    
     H = MPO(os, sites)
-    #---------------------------------------------------------------
+    #@show psi0
+    #----------------------------------------------------
     # begin dmrg
     for it = 1:size(nsweeps_list)[1]
         println("begin $(it) sweeps period")
         nsweeps = nsweeps_list[it]
         maxdim = maxdim_preset[it]
+        #
         energy, psi = dmrg(H, psi0; nsweeps, maxdim, cutoff, noise,write_when_maxdim_exceeds=write_disk_dim)
-
+        #
+        println("-----------------------------------------------")
         @show energy
         @show flux(psi)
         @show maxlinkdim(psi)
         #
-        @show (Ly, Lx, t, J, t_nnn, J_nnn, dop_level)
+        @show (Ly, Lx, t, J, dop_level)
         per_energy = energy / N
         @show per_energy
         #Compute the energy variance of an MPS to check whether it is an eigenstate.
@@ -192,12 +160,15 @@ function rundmrg()
         E = inner(psi',H,psi)
         var = H2-E^2
         @show var
-        #-------------------------------------------------------------
+        println("-----------------------------------------------")
+        psi0 = psi
+        #
+        #-----------------------------------------------------
         # save psi
         f = h5open(filename_psi, "w")
         write(f, "psi", psi)
         close(f)
-    end    
+    end
     return
 end
 #
