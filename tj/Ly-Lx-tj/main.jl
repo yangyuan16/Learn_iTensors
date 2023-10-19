@@ -1,3 +1,5 @@
+# tJ Square lattice on cylinder with symmetry condition
+# 控制粒子数 和 total spin
 #
 using ITensors
 using ITensors.HDF5
@@ -87,16 +89,17 @@ function get_psi0(N, dop_level, sites, Is_conserve_qns,way_of_psi0,loadfile)
     end
 end
 #
+#
 function rundmrg()
-    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------
     # control parameter
-    bc = ""
-    Ly = 2
-    Lx = 20
+    bc = "cylinder"
+    Ly = 4
+    Lx = 8
     N = Lx * Ly
     t = 1.0
     J = 1.0 
-    dop_level = (1, 4) # half filling
+    dop_level = (0,8) # delta
     #
     Is_conserve_qns = true
     way_of_psi0_list = ["default", "readfile"] # {readfile or default}
@@ -108,31 +111,31 @@ function rundmrg()
     cutoff = [1E-4]
     noise = [1E-6, 1E-7, 1E-8, 1E-9, 1E-10, 1E-11, 0.0]
     #
-    workpath = "./tj/Ladder-tj/output/psi/"
+    workpath = "./tj/Ly-Lx-tj/output/psi/"
     dim_lable = 500
     #
     filename_psi_1 = "Ly$(Ly)_Lx$(Lx)_N$(N)_S$(0.5)_t$(t)_J$(round(J;digits=4))_dimlabel$(dim_lable)_dop$(dop_level)_"
     filename_psi_2 = bc
     filename_psi_3 = "_psi.h5"
     filename_psi = join([workpath, filename_psi_1, filename_psi_2, filename_psi_3])
-    #--------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------
     # get lattice bonds
-    lattice = square_lattice(Lx,Ly, yperiodic = false)
-    #@show lattice
-    # get the operator sum
+    # 2D sqaure wrapped on a cylinder
+    lattice = square_lattice(Lx,Ly, yperiodic = true)
+    #
     os = OpSum()
     for b in lattice
         #@show (b.s1, b.s2)
-        os .+= -t, "Cdagup", b.s1, "Cup", b.s2
-        os .+= -t, "Cdagup", b.s2, "Cup", b.s1
-        os .+= -t, "Cdagdn", b.s1, "Cdn", b.s2
-        os .+= -t, "Cdagdn", b.s2, "Cdn", b.s1
-        os .+= J, "Sz", b.s1, "Sz", b.s2
-        os .+= 0.5 * J, "S+", b.s1, "S-", b.s2
-        os .+= 0.5 * J, "S-", b.s1, "S+", b.s2 
-        os .+= -0.25 * J, "Ntot", b.s1, "Ntot", b.s2  
+        os += -t, "Cdagup", b.s1, "Cup", b.s2
+        os += -t, "Cdagup", b.s2, "Cup", b.s1
+        os += -t, "Cdagdn", b.s1, "Cdn", b.s2
+        os += -t, "Cdagdn", b.s2, "Cdn", b.s1
+        os += J, "Sz", b.s1, "Sz", b.s2
+        os += 0.5 * J, "S+", b.s1, "S-", b.s2
+        os += 0.5 * J, "S-", b.s1, "S+", b.s2 
+        os += -0.25 * J, "Ntot", b.s1, "Ntot", b.s2  
     end
-    #-----------------------------------------------------------------------------
+    #-------------------------------------------------------------------------------
     # begin dmrg
     for in = 1:nepoch
         println("**************begin $(in) sweeps epoch************************")
@@ -168,7 +171,7 @@ function rundmrg()
             var = H2-E^2
             @show var
             println("-----------------------------------------------")
-            psi0 = psi
+            psi0 = psi            
             #
             #-----------------------------------------------------
             # save psi

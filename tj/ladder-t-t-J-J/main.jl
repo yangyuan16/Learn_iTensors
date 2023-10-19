@@ -119,10 +119,11 @@ function rundmrg()
     J = 1.0 / 3 * t
     t_nnn = 1.0 * t
     J_nnn = (t_nnn / t) *  (t_nnn / t) * J
-    dop_level = (0, 8)
+    dop_level = (1, 8)
     #
     Is_conserve_qns = true
-    way_of_psi0 = "readfile" # {readfile or default}
+    way_of_psi0_list = ["default","readfile"] # {readfile or default}
+    nepoch = 4
     #
     nsweeps_list = [5]
     maxdim_preset = [[100, 200, 400],[400,500,500]] # pre setting cutoff dimemsion
@@ -139,7 +140,7 @@ function rundmrg()
     #------------------------------------------------------------------------------
     # get lattice bonds, 2D sqaure wrapped on a cylinder
     lattice = square_lattice(Lx,Ly, yperiodic = true)
-    @show lattice
+    #@show lattice
     NNN_bonds = add_NNN_ladder(Ly, Lx)
     NNN_bonds = sortslices(NNN_bonds, dims=1)
     @show NNN_bonds
@@ -167,36 +168,45 @@ function rundmrg()
         os .+= 0.5 * J_nnn, "S-", NNN_bonds[j,1], "S+", NNN_bonds[j,2] 
         os .+= -0.25 * J_nnn, "Ntot", NNN_bonds[j,1], "Ntot", NNN_bonds[j,2]
     end  
-    # get the hamiltonian MPO
-    sites = build_sites(N, Is_conserve_qns)
-    psi0 = get_psi0(N, dop_level,sites,Is_conserve_qns,way_of_psi0,filename_psi) # 
-    sites = siteinds(psi0)      
-    H = MPO(os, sites)
     #---------------------------------------------------------------
     # begin dmrg
-    for it = 1:size(nsweeps_list)[1]
-        println("begin $(it) sweeps period")
-        nsweeps = nsweeps_list[it]
-        maxdim = maxdim_preset[it]
-        energy, psi = dmrg(H, psi0; nsweeps, maxdim, cutoff, noise,write_when_maxdim_exceeds=write_disk_dim)
-
-        @show energy
-        @show flux(psi)
-        @show maxlinkdim(psi)
+    for in = 1:nepoch
+        println("**************begin $(in) sweeps epoch************************")
+        if in == 1
+            way_of_psi0 = way_of_psi0_list[1]
+        else
+            way_of_psi0 = way_of_psi0_list[2]
+        end
+        # get the hamiltonian MPO
+        sites = build_sites(N, Is_conserve_qns)
+        psi0 = get_psi0(N, dop_level,sites,Is_conserve_qns,way_of_psi0,filename_psi) # 
+        sites = siteinds(psi0)      
+        H = MPO(os, sites)
         #
-        @show (Ly, Lx, t, J, t_nnn, J_nnn, dop_level)
-        per_energy = energy / N
-        @show per_energy
-        #Compute the energy variance of an MPS to check whether it is an eigenstate.
-        H2 = inner(H,psi,H,psi)
-        E = inner(psi',H,psi)
-        var = H2-E^2
-        @show var
-        #-------------------------------------------------------------
-        # save psi
-        f = h5open(filename_psi, "w")
-        write(f, "psi", psi)
-        close(f)
+        for it = 1:size(nsweeps_list)[1]
+            println("begin $(it) sweeps period")
+            nsweeps = nsweeps_list[it]
+            maxdim = maxdim_preset[it]
+            energy, psi = dmrg(H, psi0; nsweeps, maxdim, cutoff, noise,write_when_maxdim_exceeds=write_disk_dim)
+            #
+            @show energy
+            @show flux(psi)
+            @show maxlinkdim(psi)
+            #
+            @show (Ly, Lx, t, J, t_nnn, J_nnn, dop_level)
+            per_energy = energy / N
+            @show per_energy
+            #Compute the energy variance of an MPS to check whether it is an eigenstate.
+            H2 = inner(H,psi,H,psi)
+            E = inner(psi',H,psi)
+            var = H2-E^2
+            @show var
+            #-------------------------------------------------------------
+            # save psi
+            f = h5open(filename_psi, "w")
+            write(f, "psi", psi)
+            close(f)
+        end
     end    
     return
 end
